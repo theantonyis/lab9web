@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="uk">
+<head>
+    <meta charset="UTF-8" />
+    <title>Real-time Chat</title>
+    <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<div class="container">
+    <h2>📡 Real-time Chat</h2>
+
+    <div id="auth-section">
+        <input type="text" id="username" placeholder="Введіть ім'я" />
+        <button id="loginBtn">Увійти</button>
+    </div>
+
+    <div id="chat-section" style="display: none;">
+        <input type="text" id="roomInput" placeholder="Назва кімнати" />
+        <button id="joinRoomBtn">Увійти в кімнату</button>
+
+        <div id="chatBox"></div>
+
+        <input type="text" id="messageInput" placeholder="Повідомлення..." />
+        <button id="sendBtn">Надіслати</button>
+
+        <input type="file" id="fileInput" />
+    </div>
+</div>
+
+<script src="script.js"></script>
+</body>
+</html>
