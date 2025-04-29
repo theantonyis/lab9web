@@ -19,10 +19,33 @@ wss.on('connection', (ws) => {
             return ws.send(JSON.stringify({ type: 'info', text: 'Невідомий формат' }));
         }
 
+        // Server-side token handling update (for server.js)
         if (msg.type === 'auth') {
-            const payload = JSON.parse(Buffer.from(msg.token, 'base64').toString());
-            clients.set(ws, { name: payload.name, room: null });
-            ws.send(JSON.stringify({ type: 'info', text: `Вітаємо, ${payload.name}` }));
+            try {
+                // Properly decode base64 token as JSON
+                const tokenString = Buffer.from(msg.token, 'base64').toString();
+                const payload = JSON.parse(tokenString);
+
+                // Validate the payload has a name
+                if (!payload.name) {
+                    return ws.send(JSON.stringify({
+                        type: 'info',
+                        text: 'Помилка автентифікації: ім\'я відсутнє'
+                    }));
+                }
+
+                clients.set(ws, { name: payload.name, room: null });
+                ws.send(JSON.stringify({
+                    type: 'info',
+                    text: `Вітаємо, ${payload.name}`
+                }));
+            } catch (error) {
+                console.error('Auth error:', error);
+                ws.send(JSON.stringify({
+                    type: 'info',
+                    text: 'Помилка автентифікації: невірний формат даних'
+                }));
+            }
         }
 
         if (msg.type === 'join') {

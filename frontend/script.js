@@ -1,6 +1,9 @@
 let socket;
 let token = "";
 let userName = "";
+let reconnectAttempts = 0;
+const maxReconnectAttempts = 5;
+const reconnectDelay = 3000; // 3 seconds
 
 function log(msg) {
     const chatBox = document.getElementById("chatBox");
@@ -8,21 +11,19 @@ function log(msg) {
     chatBox.scrollTop = chatBox.scrollHeight;
 }
 
-document.getElementById("loginBtn").onclick = () => {
-    userName = document.getElementById("username").value;
-    if (!userName) return alert("Введіть ім'я");
-
-    // Перетворення userName в UTF-8 перед кодуванням у base64
-    const utf8UserName = unescape(encodeURIComponent(userName));
-    token = btoa(utf8UserName); // Тепер можна без помилок
-
-    document.getElementById("auth-section").style.display = "none";
-    document.getElementById("chat-section").style.display = "block";
-
+function connectWebSocket() {
     socket = new WebSocket("ws://localhost:3001");
 
     socket.onopen = () => {
+        reconnectAttempts = 0;
+        log("<i>З'єднання встановлено</i>");
         socket.send(JSON.stringify({ type: "auth", token }));
+
+        // If we were in a room before, rejoin it
+        const room = document.getElementById("roomInput").value;
+        if (room) {
+            socket.send(JSON.stringify({ type: "join", room }));
+        }
     };
 
     socket.onmessage = (event) => {
@@ -40,28 +41,52 @@ document.getElementById("loginBtn").onclick = () => {
         }
     };
 
-    socket.onclose = () => {
+    socket.onclose = (event) => {
         log("<i>З'єднання закрите</i>");
+
+        // Try to reconnect if not a normal closure
+        if (!event.wasClean && reconnectAttempts < maxReconnectAttempts) {
+            reconnectAttempts++;
+            log(`<i>Спроба перепідключення (${reconnectAttempts}/${maxReconnectAttempts})...</i>`);
+            setTimeout(connectWebSocket, reconnectDelay);
+        }
     };
+
+    socket.onerror = (error) => {
+        log(`<i>Помилка з'єднання</i>`);
+        console.error("WebSocket error:", error);
+    };
+}
+
+document.getElementById("loginBtn").onclick = () => {
+    userName = document.getElementById("username").value;
+    if (!userName) return alert("Введіть ім'я");
+
+    // Create a proper JSON object and encode it as base64
+    const payload = JSON.stringify({ name: userName });
+    token = btoa(payload);
+
+    document.getElementById("auth-section").style.display = "none";
+    document.getElementById("chat-section").style.display = "block";
+
+    connectWebSocket();
 };
 
 document.getElementById("joinRoomBtn").onclick = () => {
     const room = document.getElementById("roomInput").value;
-    socket.send(JSON.stringify({ type: "join", room }));
+    if (!room) return alert("Введіть назву кімнати");
+
+    sendMessage({ type: "join", room });
 };
 
 document.getElementById("sendBtn").onclick = () => {
     const text = document.getElementById("messageInput").value;
+    if (!text) return;
 
-    // Перевірка на відкритий стан WebSocket
-    if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: "chat", text }));
+    if (sendMessage({ type: "chat", text })) {
         document.getElementById("messageInput").value = "";
-    } else {
-        log("<i>Неможливо надіслати повідомлення, оскільки з'єднання закрите</i>");
     }
 };
-
 
 document.getElementById("fileInput").onchange = async (e) => {
     const file = e.target.files[0];
@@ -69,11 +94,31 @@ document.getElementById("fileInput").onchange = async (e) => {
 
     const reader = new FileReader();
     reader.onload = () => {
-        socket.send(JSON.stringify({
+        sendMessage({
             type: "file",
             name: file.name,
             data: reader.result
-        }));
+        });
     };
     reader.readAsDataURL(file);
 };
+
+// Helper function to safely send messages
+function sendMessage(data) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+        log("<i>Неможливо надіслати повідомлення, оскільки з'єднання закрите. Спроба перепідключення...</i>");
+        if (reconnectAttempts < maxReconnectAttempts) {
+            connectWebSocket();
+        }
+        return false;
+    }
+
+    try {
+        socket.send(JSON.stringify(data));
+        return true;
+    } catch (error) {
+        log(`<i>Помилка при надсиланні повідомлення: ${error.message}</i>`);
+        console.error("Error sending message:", error);
+        return false;
+    }
+}
